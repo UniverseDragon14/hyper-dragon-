@@ -1,0 +1,759 @@
+#!/usr/bin/env python3
+from pathlib import Path
+import sys
+import json
+import subprocess
+import datetime
+import tarfile
+import tempfile
+
+ROOT = Path(__file__).resolve().parents[1]
+RUNNER = ROOT / "nova-lang" / "v2" / "nova2_run.py"
+VERSION_FILE = ROOT / "NOVA_QBIT_VERSION"
+
+
+def current_version() -> str:
+    if VERSION_FILE.exists():
+        return VERSION_FILE.read_text(encoding="utf-8").strip()
+    return "1.4.0-dev"
+
+
+def help_text():
+    print("QBIT NOVA commands:")
+    print("  nova run <file.ud>")
+    print("  nova qbit <file.ud|file.qnova>")
+    print("  nova note <message>")
+    print("  nova backup")
+    print("  nova native <file.ud>")
+    print("  nova tokens <file.ud>")
+    print("  nova ast-native <file.ud>")
+    print("  nova ir <file.ud>")
+    print("  nova doctor")
+
+
+def resolve_file(name: str) -> Path:
+    p = Path(name)
+    if p.exists():
+        return p
+    rp = ROOT / name
+    if rp.exists():
+        return rp
+    print(f"QBIT NOVA file not found: {name}")
+    sys.exit(2)
+
+
+def _qbit_nova_quote(text: str) -> str:
+    return text.replace("\\", "\\\\").replace("\"", "\\\"")
+
+
+def preprocess_ud(target: Path) -> Path:
+    if target.suffix.lower() != ".ud":
+        return target
+
+    out = []
+
+    for raw in target.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+
+        if not line or line.startswith("#"):
+            continue
+
+        if line.startswith("nova "):
+            name = line.split(maxsplit=1)[1]
+            out.append(f'say "QBIT NOVA source: {_qbit_nova_quote(name)}"')
+            continue
+
+        if line.startswith("creator "):
+            name = line.split(maxsplit=1)[1]
+            out.append(f'say "Creator: {_qbit_nova_quote(name.title())}"')
+            continue
+
+        if line.startswith("team "):
+            name = line.split(maxsplit=1)[1]
+            out.append(f'say "Team: {_qbit_nova_quote(name.title())}"')
+            continue
+
+        if line.startswith("brain "):
+            name = line.split(maxsplit=1)[1]
+            brain_name = {"novakutty": "NovaKutty"}.get(name.lower(), name)
+            out.append(f'say "Brain: {_qbit_nova_quote(brain_name)}"')
+            continue
+
+        if line.startswith("say "):
+            out.append(line)
+            continue
+
+        if line.startswith("let "):
+            rest = line[4:].strip()
+            if "=" in rest:
+                key, value = rest.split("=", 1)
+                key = key.strip()
+                value = value.strip()
+                value = value.replace("\\", "")
+                if (value.startswith(chr(34)) and value.endswith(chr(34))) or (value.startswith(chr(39)) and value.endswith(chr(39))):
+                    value = value[1:-1]
+                out.append(f'say "memory {_qbit_nova_quote(key)} = {_qbit_nova_quote(value)}"')
+            else:
+                out.append(f'say "memory {_qbit_nova_quote(rest)}"')
+            continue
+
+        if line.startswith(("qbit ", "h ", "cnot ", "measure ", "state ", "prob ", "simulate ")):
+            out.append(line)
+            continue
+
+        if line.startswith("when ") and line.endswith(":"):
+            condition = line[5:-1].strip()
+            out.append(f'say "when {_qbit_nova_quote(condition)} block loaded"')
+            continue
+
+        if line.startswith("adapter ") and line.endswith(":"):
+            adapter_name = line[8:-1].strip()
+            out.append(f'say "adapter {_qbit_nova_quote(adapter_name)} block loaded"')
+            continue
+
+        if line.endswith(":"):
+            block = line[:-1]
+            out.append(f'say "{_qbit_nova_quote(block)} block loaded"')
+            continue
+
+        if line.startswith("title "):
+            title = line.split(maxsplit=1)[1].strip()
+            title = title.replace("\\", "")
+            if (title.startswith(chr(34)) and title.endswith(chr(34))) or (title.startswith(chr(39)) and title.endswith(chr(39))):
+                title = title[1:-1]
+            out.append(f'say "Title: {_qbit_nova_quote(title)}"')
+            continue
+
+        if line.startswith(("mode ", "owner_approval ", "dangerous_action ", "action ", "reply ", "requires ", "allow ", "deny ")):
+            out.append(f'say "{_qbit_nova_quote(line)}"')
+            continue
+
+    temp = Path(tempfile.gettempdir()) / f"qbit_nova_{target.stem}.qnova"
+    temp.write_text("\n".join(out) + "\n", encoding="utf-8")
+    return temp
+
+
+
+# QBIT_NOVA_V04_REAL_CONDITIONAL_RUNTIME
+def _ud_unquote(value: str) -> str:
+    value = value.strip()
+    value = value.replace("\\", "")
+    if (value.startswith(chr(34)) and value.endswith(chr(34))) or (value.startswith(chr(39)) and value.endswith(chr(39))):
+        value = value[1:-1]
+    return value
+
+
+def _parse_ud_when_blocks(target: Path):
+    lines = target.read_text(encoding="utf-8").splitlines()
+    blocks = {}
+    i = 0
+
+    while i < len(lines):
+        line = lines[i].strip()
+
+        if line.startswith("when ") and line.endswith(":") and "==" in line:
+            condition = line[5:-1].strip()
+            left, right = condition.split("==", 1)
+            qbit_name = left.strip()
+            state = right.strip()
+            messages = []
+
+            i += 1
+            while i < len(lines):
+                raw = lines[i]
+                stripped = raw.strip()
+
+                if not stripped:
+                    i += 1
+                    continue
+
+                if not raw.startswith((" ", "\t")):
+                    break
+
+                if stripped.startswith("say "):
+                    messages.append(_ud_unquote(stripped[4:].strip()))
+
+                i += 1
+
+            blocks[(qbit_name, state)] = messages
+            continue
+
+        i += 1
+
+    return blocks
+
+
+def run_ud_v04_conditional(target: Path) -> int:
+    temp = preprocess_ud(target)
+
+    result = subprocess.run(
+        [sys.executable, str(RUNNER), str(temp)],
+        cwd=str(ROOT),
+        text=True,
+        capture_output=True,
+    )
+
+    if result.stderr:
+        print(result.stderr, file=sys.stderr)
+
+    if result.returncode != 0:
+        print(result.stdout, end="")
+        return result.returncode
+
+    stdout = result.stdout
+    blocks = _parse_ud_when_blocks(target)
+
+    measured_name = None
+    measured_state = None
+
+    for line in stdout.splitlines():
+        if line.startswith("measure ") and "=>" in line:
+            left, right = line.split("=>", 1)
+            measured_name = left.replace("measure", "", 1).strip()
+            measured_state = right.strip().split()[0]
+            break
+
+    all_branch_messages = set()
+    for msgs in blocks.values():
+        for msg in msgs:
+            all_branch_messages.add(msg)
+
+    filtered = []
+    for line in stdout.splitlines():
+        stripped = line.strip()
+
+        if stripped.startswith("when ") and stripped.endswith("block loaded"):
+            continue
+
+        if stripped in all_branch_messages:
+            continue
+
+        filtered.append(line)
+
+    print("\n".join(filtered))
+
+    if measured_name is None or measured_state is None:
+        print("QBIT NOVA v0.4 conditional error: no measurement found")
+        return 1
+
+    selected = blocks.get((measured_name, measured_state), [])
+
+    print(f"when {measured_name} == {measured_state} selected")
+
+    if not selected:
+        print("QBIT NOVA v0.4 conditional error: no matching when block")
+        return 1
+
+    for msg in selected:
+        print(msg)
+
+    return 0
+
+
+
+# QBIT_NOVA_V05_AST_EXPORT
+def parse_ud_ast(target: Path) -> dict:
+    ast = {
+        "language": "QBIT NOVA",
+        "ud": "Universal Dragon",
+        "creator": None,
+        "team": None,
+        "brain": None,
+        "source": str(target),
+        "memory": [],
+        "qbits": [],
+        "gates": [],
+        "measurements": [],
+        "says": [],
+        "when_blocks": [],
+        "adapters": [],
+        "runtime": [],
+    }
+
+    lines = target.read_text(encoding="utf-8").splitlines()
+    i = 0
+
+    while i < len(lines):
+        raw = lines[i]
+        line = raw.strip()
+
+        if not line or line.startswith("#"):
+            i += 1
+            continue
+
+        if line.startswith("nova "):
+            ast["nova"] = line.split(maxsplit=1)[1].strip()
+            i += 1
+            continue
+
+        if line.startswith("creator "):
+            ast["creator"] = line.split(maxsplit=1)[1].strip().title()
+            i += 1
+            continue
+
+        if line.startswith("team "):
+            ast["team"] = line.split(maxsplit=1)[1].strip().title()
+            i += 1
+            continue
+
+        if line.startswith("brain "):
+            name = line.split(maxsplit=1)[1].strip()
+            ast["brain"] = {"novakutty": "NovaKutty"}.get(name.lower(), name)
+            i += 1
+            continue
+
+        if line.startswith("let "):
+            rest = line[4:].strip()
+            if "=" in rest:
+                key, value = rest.split("=", 1)
+                ast["memory"].append({
+                    "name": key.strip(),
+                    "value": _ud_unquote(value.strip()),
+                })
+            else:
+                ast["memory"].append({"name": rest, "value": None})
+            i += 1
+            continue
+
+        if line.startswith("qbit "):
+            rest = line[5:].strip()
+            if "=" in rest:
+                name, state = rest.split("=", 1)
+                ast["qbits"].append({
+                    "name": name.strip(),
+                    "state": state.strip(),
+                })
+            i += 1
+            continue
+
+        if line.startswith(("h ", "x ", "z ")):
+            parts = line.split()
+            ast["gates"].append({
+                "gate": parts[0],
+                "target": parts[1] if len(parts) > 1 else "",
+            })
+            i += 1
+            continue
+
+        if line.startswith("cnot "):
+            ast["gates"].append({
+                "gate": "cnot",
+                "target": line[5:].strip(),
+            })
+            i += 1
+            continue
+
+        if line.startswith("measure "):
+            ast["measurements"].append({
+                "target": line.split(maxsplit=1)[1].strip(),
+            })
+            i += 1
+            continue
+
+        if line.startswith("say "):
+            ast["says"].append(_ud_unquote(line[4:].strip()))
+            i += 1
+            continue
+
+        if line == "runtime conditional":
+            ast["runtime"].append("conditional")
+            i += 1
+            continue
+
+        if line.startswith("when ") and line.endswith(":"):
+            condition = line[5:-1].strip()
+            body = []
+            i += 1
+
+            while i < len(lines):
+                child_raw = lines[i]
+                child = child_raw.strip()
+
+                if not child:
+                    i += 1
+                    continue
+
+                if not child_raw.startswith((" ", "\t")):
+                    break
+
+                body.append(child)
+                i += 1
+
+            ast["when_blocks"].append({
+                "condition": condition,
+                "body": body,
+            })
+            continue
+
+        if line.startswith("adapter ") and line.endswith(":"):
+            name = line[8:-1].strip()
+            body = []
+            i += 1
+
+            while i < len(lines):
+                child_raw = lines[i]
+                child = child_raw.strip()
+
+                if not child:
+                    i += 1
+                    continue
+
+                if not child_raw.startswith((" ", "\t")):
+                    break
+
+                body.append(child)
+                i += 1
+
+            ast["adapters"].append({
+                "name": name,
+                "body": body,
+            })
+            continue
+
+        i += 1
+
+    return ast
+
+
+def ast_nova(file_arg: str) -> int:
+    target = resolve_file(file_arg)
+
+    if target.suffix.lower() != ".ud":
+        print("QBIT NOVA AST supports .ud files only")
+        return 1
+
+    ast = parse_ud_ast(target)
+    print(json.dumps(ast, indent=2, ensure_ascii=False))
+    return 0
+
+
+
+# QBIT_NOVA_V06_SEMANTIC_CHECKER
+def _semantic_error(errors, message: str):
+    errors.append(message)
+
+
+def semantic_check_ud(target: Path) -> tuple[bool, list[str], dict]:
+    ast = parse_ud_ast(target)
+    errors = []
+
+    qbit_names = {item.get("name") for item in ast.get("qbits", []) if item.get("name")}
+    measured_names = {item.get("target") for item in ast.get("measurements", []) if item.get("target")}
+
+    if ast.get("language") != "QBIT NOVA":
+        _semantic_error(errors, "language must be QBIT NOVA")
+
+    if ast.get("creator") != "Aslam":
+        _semantic_error(errors, "creator must be Aslam")
+
+    if ast.get("team") != "Askutty":
+        _semantic_error(errors, "team must be Askutty")
+
+    if ast.get("brain") != "NovaKutty":
+        _semantic_error(errors, "brain must be NovaKutty")
+
+    if not qbit_names:
+        _semantic_error(errors, "at least one qbit is required")
+
+    valid_states = {"|0>", "|1>"}
+    for qbit in ast.get("qbits", []):
+        name = qbit.get("name")
+        state = qbit.get("state")
+        if state not in valid_states:
+            _semantic_error(errors, f"qbit {name} has invalid state {state}")
+
+    for gate in ast.get("gates", []):
+        target_name = gate.get("target", "").strip()
+        if gate.get("gate") == "cnot":
+            parts = [p.strip() for p in target_name.replace(",", " ").split() if p.strip()]
+            for part in parts:
+                if part not in qbit_names:
+                    _semantic_error(errors, f"gate cnot target {part} is not declared qbit")
+        else:
+            if target_name not in qbit_names:
+                _semantic_error(errors, f"gate {gate.get('gate')} target {target_name} is not declared qbit")
+
+    for measurement in ast.get("measurements", []):
+        target_name = measurement.get("target")
+        if target_name not in qbit_names:
+            _semantic_error(errors, f"measure target {target_name} is not declared qbit")
+
+    when_blocks = ast.get("when_blocks", [])
+
+    if when_blocks and "conditional" not in ast.get("runtime", []):
+        _semantic_error(errors, "when blocks require runtime conditional")
+
+    for block in when_blocks:
+        condition = block.get("condition", "").strip()
+
+        if "==" not in condition:
+            _semantic_error(errors, f"when condition must use == : {condition}")
+            continue
+
+        left, right = [part.strip() for part in condition.split("==", 1)]
+
+        if left not in qbit_names:
+            _semantic_error(errors, f"when qbit {left} is not declared")
+
+        if left not in measured_names:
+            _semantic_error(errors, f"when qbit {left} must be measured before branch")
+
+        if right not in {"0", "1"}:
+            _semantic_error(errors, f"when value must be 0 or 1: {condition}")
+
+        body = block.get("body", [])
+        if not body:
+            _semantic_error(errors, f"when block has empty body: {condition}")
+
+    for adapter in ast.get("adapters", []):
+        name = adapter.get("name", "")
+        body = adapter.get("body", [])
+
+        if name == "whatsapp":
+            required = [
+                "mode safe_reply",
+                "owner_approval required",
+                "dangerous_action deny",
+            ]
+
+            for item in required:
+                if item not in body:
+                    _semantic_error(errors, f"adapter whatsapp missing: {item}")
+
+        for line in body:
+            lower = line.lower().strip()
+            blocked_prefixes = (
+                "shell ",
+                "exec ",
+                "terminal ",
+                "curl ",
+                "wget ",
+                "rm ",
+                "sudo ",
+            )
+            if lower.startswith(blocked_prefixes):
+                _semantic_error(errors, f"adapter contains raw system command: {line}")
+
+    return len(errors) == 0, errors, ast
+
+
+def check_nova(file_arg: str) -> int:
+    target = resolve_file(file_arg)
+
+    if target.suffix.lower() != ".ud":
+        print("QBIT NOVA semantic checker supports .ud files only")
+        return 1
+
+    ok, errors, ast = semantic_check_ud(target)
+
+    print("QBIT NOVA semantic check")
+    print(f"source: {target}")
+    print(f"creator: {ast.get('creator')}")
+    print(f"team: {ast.get('team')}")
+    print(f"brain: {ast.get('brain')}")
+    print(f"qbits: {len(ast.get('qbits', []))}")
+    print(f"measurements: {len(ast.get('measurements', []))}")
+    print(f"when_blocks: {len(ast.get('when_blocks', []))}")
+    print(f"adapters: {len(ast.get('adapters', []))}")
+
+    if errors:
+        print("semantic status: RED")
+        for err in errors:
+            print(f"- {err}")
+        print("QBIT_NOVA_V06_SEMANTIC_RED")
+        return 1
+
+    print("semantic status: GREEN")
+    print("QBIT_NOVA_V06_SEMANTIC_GREEN")
+    return 0
+
+
+def run_nova(file_arg: str) -> int:
+    if not RUNNER.exists():
+        print(f"QBIT NOVA runner not found: {RUNNER}")
+        return 1
+
+    target = resolve_file(file_arg)
+
+    if target.suffix.lower() == ".ud":
+        try:
+            raw = target.read_text(encoding="utf-8", errors="ignore").lower()
+        except Exception:
+            raw = ""
+
+        if "runtime conditional" in raw:
+            return run_ud_v04_conditional(target)
+
+    target = preprocess_ud(target)
+    return subprocess.call([sys.executable, str(RUNNER), str(target)])
+
+
+
+# QBIT_NOVA_V10_CLI_NATIVE_COMMANDS
+def _qbit_engine_script(name: str) -> Path:
+    script = ROOT / "engine" / name
+    if not script.exists():
+        print(f"QBIT NOVA engine script missing: {script}")
+        sys.exit(2)
+    return script
+
+
+def _call_qbit_engine(script_name: str, file_arg: str) -> int:
+    target = resolve_file(file_arg)
+    script = _qbit_engine_script(script_name)
+    return subprocess.call([sys.executable, str(script), str(target)], cwd=str(ROOT))
+
+
+def native_nova(file_arg: str) -> int:
+    print("QBIT NOVA v1.0 CLI native command")
+    return _call_qbit_engine("qbit_nova_v09_pipeline.py", file_arg)
+
+
+def tokens_nova(file_arg: str) -> int:
+    print("QBIT NOVA v1.0 CLI tokens command")
+    return _call_qbit_engine("qbit_nova_v08_tokenizer.py", file_arg)
+
+
+def ast_native_nova(file_arg: str) -> int:
+    print("QBIT NOVA v1.0 CLI ast-native command")
+    return _call_qbit_engine("qbit_nova_v09_token_parser.py", file_arg)
+
+
+def ir_nova(file_arg: str) -> int:
+    target = resolve_file(file_arg)
+
+    engine_dir = ROOT / "engine"
+    if str(engine_dir) not in sys.path:
+        sys.path.insert(0, str(engine_dir))
+
+    import qbit_nova_v07_engine as native_engine
+    import qbit_nova_v09_token_parser as token_parser
+    import qbit_nova_v09_pipeline as token_pipeline
+
+    try:
+        ast = token_parser.parse_file(target)
+        ast = token_pipeline.normalize_ast(ast)
+    except SyntaxError as err:
+        print("QBIT NOVA v1.0 IR command RED")
+        print(str(err))
+        print("QBIT_NOVA_V10_IR_RED")
+        return 1
+
+    errors = native_engine.semantic_errors(ast)
+
+    if errors:
+        print("QBIT NOVA v1.0 IR command semantic RED")
+        for err in errors:
+            print(f"- {err}")
+        print("QBIT_NOVA_V10_IR_RED")
+        return 1
+
+    print("QBIT NOVA v1.0 IR command")
+    print("source: " + str(target))
+    print("QBIT_IR_BEGIN")
+    for line in native_engine.compile_ir(ast):
+        print(line)
+    print("QBIT_IR_END")
+    print("QBIT_NOVA_V10_IR_GREEN")
+    return 0
+
+
+def note(args):
+    notes_dir = Path.home() / "nova-lang" / "notes"
+    notes_dir.mkdir(parents=True, exist_ok=True)
+    msg = " ".join(args).strip()
+    stamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    with open(notes_dir / "nova_notes.log", "a", encoding="utf-8") as f:
+        f.write(f"{stamp} {msg}\n")
+    print("Noted.")
+
+
+def backup():
+    backup_dir = Path.home() / "nova-lang" / "backups"
+    backup_dir.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    dest = backup_dir / f"backup_{stamp}.tar.gz"
+
+    skip_names = {".git", "node_modules", ".next", "dist", "build"}
+
+    with tarfile.open(dest, "w:gz") as tar:
+        for path in ROOT.rglob("*"):
+            if any(part in skip_names for part in path.parts):
+                continue
+            arc = Path(ROOT.name) / path.relative_to(ROOT)
+            tar.add(path, arcname=str(arc), recursive=False)
+
+    print(f"Backup created: {dest}")
+
+
+def doctor():
+    print("QBIT NOVA doctor")
+    print(f"UD      : Universal Dragon")
+    print(f"Creator : Aslam")
+    print(f"Team    : Askutty")
+    print(f"Brain   : NovaKutty")
+    print(f"Version : {current_version()}")
+    print(f"ROOT    : {ROOT}")
+    print(f"Runner  : {'OK' if RUNNER.exists() else 'MISSING'}")
+    help_text()
+
+
+def main():
+    if len(sys.argv) < 2:
+        help_text()
+        return 0
+
+    cmd = sys.argv[1].lower()
+    args = sys.argv[2:]
+
+    if cmd in ("run", "qbit"):
+        if not args:
+            print(f"Usage: nova {cmd} <file.ud>")
+            return 1
+        return run_nova(args[0])
+
+
+    if cmd in ("native", "tokens", "ast-native", "ir"):
+        if not args:
+            print(f"Usage: nova {cmd} <file.ud>")
+            return 1
+
+        handlers = {
+            "native": native_nova,
+            "tokens": tokens_nova,
+            "ast-native": ast_native_nova,
+            "ir": ir_nova,
+        }
+
+        return handlers[cmd](args[0])
+
+    if cmd == "note":
+        note(args)
+        return 0
+
+    if cmd == "backup":
+        backup()
+        return 0
+
+    if cmd == "ast":
+        if not args:
+            print("Usage: nova ast <file.ud>")
+            return 1
+        return ast_nova(args[0])
+
+    if cmd == "check":
+        if not args:
+            print("Usage: nova check <file.ud>")
+            return 1
+        return check_nova(args[0])
+
+    if cmd in ("doctor", "version"):
+        doctor()
+        return 0
+
+    help_text()
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
