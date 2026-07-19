@@ -1,37 +1,51 @@
-# Universal Dragon Core - QBIT NOVA
+# Universal Dragon Aslam · EVE NOVA · QBIT NOVA
 
 <p align="center">
   <img
     src="docs/assets/qbit-nova-universal-dragon-global-system.jpg"
-    alt="QBIT NOVA Universal Dragon Global System"
+    alt="Universal Dragon Aslam EVE NOVA Global System"
     width="900"
   />
 </p>
 
 <p align="center">
-  <strong>Universal Dragon Global System</strong><br>
-  QBIT NOVA · Virtual QCPU · Raspberry Pi 5 · Approval-First Architecture
+  <strong>Universal Dragon Aslam Global System</strong><br>
+  EVE Intelligence · NOVA Brain · QBIT NOVA · Virtual QCPU · Raspberry Pi 5 · Approval-First Architecture
 </p>
 
 UD means Universal Dragon.
 
-Creator: Aslam
-Team: Askutty
-Brain: NovaKutty
-Language: QBIT NOVA
-Source extension: `.ud`
+Creator: Aslam  
+Team: Askutty  
+Intelligence: EVE  
+Brain: NOVA  
+Language: QBIT NOVA  
+Source extension: `.ud`  
 Version: `1.4.0-dev`
-Branch: `nova-v1.4.0-dev`
+
+## System hierarchy
+
+```text
+Universal Dragon Aslam
+├── EVE Intelligence Layer
+├── NOVA Brain Core
+├── QBIT NOVA Language
+├── Virtual QCPU
+├── Dragon Eye
+└── Approval-First Guard
+```
+
+Public interfaces use only Universal Dragon, Aslam, EVE, NOVA, QBIT NOVA, UDOS, and Dragon Eye identity names.
+
+External intelligence tokens, endpoints, model identifiers, SDKs, and runtime adapters are private implementation details. They must not appear in the browser UI, public API responses, normal logs, screenshots, or committed secrets.
+
+## Core identity
 
 QBIT NOVA is the top-level Universal Dragon language. The user writes `.ud` source files only.
 
-## Core Identity
+QBIT NOVA is not publicly identified as Python, C, C++, Java, HTML, TypeScript, or as any external AI provider. Supporting technologies may exist only as internal compiler, runtime, or private-adapter targets.
 
-QBIT NOVA is not a public Python, C, C++, Java, HTML, or TypeScript project.
-
-Other technologies may exist later only as hidden compiler/runtime targets. The visible language identity is QBIT NOVA.
-
-## Quick Test
+## Quick test
 
 ```bash
 nova doctor
@@ -39,15 +53,16 @@ nova run examples/v2/qbit_nova_world.ud
 nova qbit examples/v2/qbit_test.qnova
 ```
 
-## QBIT NOVA Example
+## QBIT NOVA example
 
 ```ud
 nova universal_dragon
 creator aslam
 team askutty
-brain novakutty
+intelligence eve
+brain nova
 
-say "QBIT NOVA language online"
+say "Universal Dragon EVE NOVA online"
 
 qbit dragon = |0>
 h dragon
@@ -59,7 +74,7 @@ guard:
 ```
 
 <!-- NOVA_QBIT_STATUS_START -->
-## NOVA QBIT Test Status
+## NOVA QBIT test status
 
 [![NOVA QBIT Tests](https://github.com/UniverseDragon14/Universal-Dragon-Core/actions/workflows/qbit-tests.yml/badge.svg?branch=nova-v1.4.0-dev)](https://github.com/UniverseDragon14/Universal-Dragon-Core/actions/workflows/qbit-tests.yml)
 
@@ -81,8 +96,11 @@ Latest locked milestone:
 
 <!-- NOVA_QBIT_STATUS_END -->
 
-## Safety
+## Guard contract
 
-QBIT NOVA allows safe adapter output and owner approval flows.
+```text
+[GUARD] owner_approval = REQUIRED
+[GUARD] dangerous_action = DENY
+```
 
-It blocks raw terminal execution through external adapters and does not allow automatic live call answering or dangerous system mutation without approval.
+Universal Dragon allows safe adapter output, simulation, validation, and owner-approval flows. It blocks raw external-adapter command execution, automatic account-changing actions, and dangerous system mutation without explicit owner approval.
