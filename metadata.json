@@ -1,11 +1,13 @@
 {
-  "name": "Universal Dragon QBIT NOVA",
+  "name": "Universal Dragon Aslam EVE NOVA",
   "version": "1.4.0-dev",
+  "system": "Universal Dragon",
   "creator": "Aslam",
   "team": "Askutty",
-  "brain": "NovaKutty",
+  "intelligence": "EVE",
+  "brain": "NOVA",
   "language": "QBIT NOVA",
   "sourceExtension": ".ud",
-  "description": "Universal Dragon top-level QBIT NOVA language branch.",
+  "description": "Universal Dragon Aslam system with EVE intelligence, NOVA brain, and QBIT NOVA language.",
   "requestFramePermissions": ["microphone"]
 }
