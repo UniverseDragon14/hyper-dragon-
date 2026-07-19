@@ -7,7 +7,7 @@ import { DragonEye } from './components/DragonEye';
 import { RobotControlPanel } from './components/RobotControlPanel';
 import { RobotStatusSummary } from './components/RobotStatusSummary';
 import { NovaCore } from './components/NovaCore';
-import { KimiBrain } from './components/KimiBrain';
+import { EveNovaBrain } from './components/EveNovaBrain';
 import { AutoCodeEngine } from './components/AutoCodeEngine';
 import { WhatsAppBypass } from './components/WhatsAppBypass';
 import { SystemLogs } from './components/SystemLogs';
@@ -80,7 +80,7 @@ export default function App() {
 
       const timestamp = new Date().toISOString().split('T')[1].slice(0, -1);
       const randomMessage = MOCK_LOG_MESSAGES[Math.floor(Math.random() * MOCK_LOG_MESSAGES.length)];
-      const prefix = Math.random() > 0.7 ? '[NOVA]' : '[SYS]';
+      const prefix = Math.random() > 0.7 ? '[NOVA]' : '[UDOS]';
       setLogs((previous) => [...previous.slice(-15), `${prefix} ${timestamp} - ${randomMessage}`]);
 
       if (Math.random() > 0.8) {
@@ -143,7 +143,7 @@ export default function App() {
           <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-6">
             <Terminal logs={logs} />
             <SystemLogs logs={systemLogs} />
-            <KimiBrain />
+            <EveNovaBrain />
           </div>
         </div>
 
@@ -160,8 +160,8 @@ export default function App() {
       </main>
 
       <footer className="flex items-center justify-between px-4 py-2 opacity-20 pointer-events-none">
-        <div className="text-[8px] font-mono tracking-[0.2em]">UNIVERSAL_DRAGON_GRID_V7.0_STABLE</div>
-        <div className="text-[8px] font-mono tracking-[0.2em]">MASTER_ASLAM_REAL_CREATOR</div>
+        <div className="text-[8px] font-mono tracking-[0.2em]">UNIVERSAL_DRAGON_EVE_NOVA_GRID</div>
+        <div className="text-[8px] font-mono tracking-[0.2em]">CREATOR_ASLAM · TEAM_ASKUTTY</div>
       </footer>
     </div>
   );
