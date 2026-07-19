@@ -1,16 +1,17 @@
 nova universal_dragon
 creator aslam
 team askutty
-brain novakutty
+let intelligence = "EVE"
+brain NOVA
 
-say "QBIT NOVA language online"
+say "Universal Dragon EVE NOVA online"
 
 qbit dragon = |0>
 h dragon
 measure dragon
 
 screen main:
-  title "Universal Dragon"
+  title "Universal Dragon Aslam · EVE NOVA"
 
 guard:
   owner_approval required
