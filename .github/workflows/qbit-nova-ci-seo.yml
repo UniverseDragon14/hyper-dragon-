@@ -60,7 +60,8 @@ jobs:
               "UD means Universal Dragon",
               "Creator: Aslam",
               "Team: Askutty",
-              "Brain: NovaKutty",
+              "Intelligence: EVE",
+              "Brain: NOVA",
               "Language: QBIT NOVA",
               "Source extension: `.ud`",
           ]
@@ -68,21 +69,24 @@ jobs:
           for item in required_readme:
               assert item in readme, f"README missing: {item}"
 
+          assert meta["system"] == "Universal Dragon"
           assert meta["creator"] == "Aslam"
           assert meta["team"] == "Askutty"
-          assert meta["brain"] == "NovaKutty"
+          assert meta["intelligence"] == "EVE"
+          assert meta["brain"] == "NOVA"
           assert meta["language"] == "QBIT NOVA"
           assert meta["sourceExtension"] == ".ud"
 
           assert "nova universal_dragon" in world
           assert "creator aslam" in world
           assert "team askutty" in world
-          assert "brain novakutty" in world
+          assert 'let intelligence = "EVE"' in world
+          assert "brain NOVA" in world
 
           assert "QBIT NOVA Grammar Contract v0.2" in grammar
           assert "dangerous_action deny" in grammar
 
-          print("QBIT NOVA identity check passed")
+          print("Universal Dragon EVE NOVA identity check passed")
           CHECK
 
       - name: Basic SEO/static check
@@ -98,7 +102,6 @@ jobs:
                   found = True
                   html = p.read_text(encoding="utf-8", errors="ignore").lower()
                   print(f"Checking SEO/static file: {p}")
-
                   if "<title" not in html:
                       print("SEO WARNING: title tag missing")
                   if "description" not in html:
