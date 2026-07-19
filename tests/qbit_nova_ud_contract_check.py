@@ -10,17 +10,19 @@ REQUIRED = [
     "QBIT NOVA source: universal_dragon",
     "Creator: Aslam",
     "Team: Askutty",
-    "Brain: NovaKutty",
-    "QBIT NOVA language online",
+    "memory intelligence = EVE",
+    "Brain: NOVA",
+    "Universal Dragon EVE NOVA online",
     "qbit dragon = |0>",
     "h dragon",
     "measure dragon =>",
     "screen main block loaded",
-    "Title: Universal Dragon",
+    "Title: Universal Dragon Aslam · EVE NOVA",
     "guard block loaded",
     "owner_approval required",
     "dangerous_action deny",
 ]
+
 
 def main() -> int:
     if not CLI.exists():
@@ -57,6 +59,7 @@ def main() -> int:
 
     print("QBIT_NOVA_UD_CONTRACT_GREEN")
     return 0
+
 
 if __name__ == "__main__":
     raise SystemExit(main())
