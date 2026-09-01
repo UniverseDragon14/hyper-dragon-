@@ -1,8 +1,8 @@
 # Hyper Dragon Branch Map
 
-Inspected on **2026-09-01**. All **5 reachable branches** are accounted for.
+Inspected on **2026-09-01**. All **5 reachable branches** are accounted for. The implementation tips were recorded before documentation-only audit commits.
 
-| Branch | Inspected tip | Purpose / state |
+| Branch | Inspected implementation tip | Purpose / state |
 |---|---|---|
 | `agent/kimi-k3-cloudflare` | `30ba4e574191` | Large initial snapshot with QBIT/NOVA docs, runtime history, dashboard and Kimi/Cloudflare setup |
 | `feat/kimi-k3-nova-brain` | `c0e81eadf198` | Kimi brain deployment guide |
