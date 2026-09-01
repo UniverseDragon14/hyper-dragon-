@@ -9,6 +9,8 @@ This repository combines two active experimental tracks:
 
 The current QBIT version marker is **1.4.0-dev**.
 
+All **5 branches** were inspected on 2026-09-01. See [BRANCHES.md](BRANCHES.md) for the complete map and snapshot boundaries.
+
 ## Repository map
 
 | Path | Current role |
